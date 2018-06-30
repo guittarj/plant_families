@@ -1,0 +1,191 @@
+---
+title: "Plant families and orders eaten"
+output: html_document
+---
+
+
+```{r global_options, include = FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, cache = TRUE)
+
+```
+### Below is a dynamic plot showing the plant families we've eaten. You can hover over the tree tips to see notes. You can collapse or expand individual nodes by clicking on them.
+
+### This figure requires `ate_it.csv`, a file that has a list of species eaten, and any associated notes you'd like to include (e.g., hover over green cabbage.)
+
+```{r}
+
+wd <- "C:/Users/John/Desktop/plant families eaten/"
+setwd(wd)
+
+library(ggtree)
+library(dplyr)
+library(phytools)
+library(tidytree)
+library(collapsibleTree)
+library(data.tree)
+
+phylo <- read.tree('plant_families_Gastauer2017.new')
+ate_raw <- read.csv('ate_it.csv', stringsAsFactors = FALSE)
+ate <- ate_raw %>%
+  mutate_all(trimws) %>%
+  mutate(family = tolower(family), 
+         species = tolower(species),
+         )
+
+```
+
+```{r, fig.height = 10, fig.width = 10, message = FALSE, echo = FALSE}
+
+fams <- unique(ate$family[ate$family != ''])
+x <- as_data_frame(phylo)
+
+if(!all(fams %in% unique(ate$all_families))) 
+  stop(paste("Not all families eaten are present in tree. Check your spelling of:", fams[!fams %in% unique(ate$all_families)]))
+ate <- ate %>%
+  filter(family %in% fams) %>%
+  mutate(label = paste0(genus, ' ', species, ' (', common_name, ')'))
+
+x$parent_name <- x$label[match(x$parent, x$node)]
+x$parent_name[x$label == 'angiosperms'] <- NA
+
+a <- list()
+ups <- for(i in fams) {
+  #location
+  k <-1
+  #name
+  j <- x$parent_name[x$label == i]
+  a[[i]] <- c()
+  while (!is.na(j)) {
+    a[[i]][[k]] <- j
+    k <- k + 1
+    j <- x$parent_name[x$label == j]
+  }
+  a[[i]] <- a[[i]][!grepl("_to_", a[[i]], fixed = TRUE)]
+}
+
+j <- data.frame(parent = NA, child = 'angiosperms')
+
+for(i in names(a)) {
+  len <- length(a[[i]])
+  tmp <- data.frame(parent = a[[i]],
+                    child = c(i, a[[i]][1:len-1]))
+  j <- rbind(j, tmp)
+}
+
+j <- rbind(
+  mutate(j,
+    color = ifelse(child %in% ate_raw$all_families, as.character(child), NA),
+    notes = ''),
+  transmute(ate, 
+    color = family, 
+    parent = family, 
+    child = label,
+    notes = notes)) %>%
+  mutate(
+    color = as.numeric(as.factor(color)),
+    color = ifelse(is.na(color), '#FFFFFF',
+                   colorspace::rainbow_hcl(length(unique(color[!is.na(color)])))[color]))
+
+collapsibleTreeNetwork(j, 
+  attribute = 'notes', fill = 'color', 
+  collapsed = FALSE, zoomable = FALSE, nodeSize = 'leafCount')
+
+```
+
+### Here is a static plot showing all the families consumed so far.
+
+```{r}
+
+zoom(phylo, fams)
+
+```
+
+### Here is the same thing, but grouped by orders:
+
+```{r, include = FALSE}
+ord.tree <- as.Node(phylo)
+Prune(ord.tree, function(x) !grepl("eae$", x$levelName))
+ord.tree <- ToNewick(ord.tree, heightAttribute = NULL)
+ord.tree <- read.tree(text = ord.tree)
+
+```
+
+```{r, fig.height = 10, fig.width = 10, message = FALSE, echo = FALSE}
+
+ords <- unique(ate$order[ate$order != ''])
+x <- as_data_frame(ord.tree)
+
+if(!all(ords %in% unique(ate_raw$all_orders))) 
+  stop(paste("Not all orders eaten are present in tree. Check your spelling of:", ords[!ords %in% unique(ate$all_orders)]))
+ate <- ate %>%
+  mutate(label2 = paste0(family, ' ', genus, ' ', species, ' (', common_name, ')'))
+
+x$parent_name <- x$label[match(x$parent, x$node)]
+x$parent_name[x$label == 'angiosperms'] <- NA
+
+a <- list()
+ups <- for(i in ords) {
+  #location
+  k <-1
+  #name
+  j <- x$parent_name[x$label == i]
+  a[[i]] <- c()
+  while (!is.na(j)) {
+    a[[i]][[k]] <- j
+    k <- k + 1
+    j <- x$parent_name[x$label == j]
+  }
+  a[[i]] <- a[[i]][!grepl("_to_", a[[i]], fixed = TRUE)]
+}
+
+j <- data.frame(parent = NA, child = 'angiosperms')
+
+for(i in names(a)) {
+  len <- length(a[[i]])
+  tmp <- data.frame(parent = a[[i]],
+                    child = c(i, a[[i]][1:len-1]))
+  j <- rbind(j, tmp)
+}
+
+j <- rbind(
+  mutate(j,
+    color = ifelse(child %in% ate_raw$all_orders, as.character(child), NA),
+    notes = ''),
+  transmute(ate, 
+    color = order, 
+    parent = order, 
+    child = label2,
+    notes = notes)) %>%
+  mutate(
+    color = as.numeric(as.factor(color)),
+    color = ifelse(is.na(color), '#FFFFFF',
+                   colorspace::rainbow_hcl(length(unique(color[!is.na(color)])))[color]))
+
+collapsibleTreeNetwork(j, 
+  attribute = 'notes', fill = 'color', 
+  collapsed = FALSE, zoomable = FALSE, nodeSize = 'leafCount'
+  )
+
+
+```
+
+
+### Here is a static plot showing all the orders consumed so far.
+
+```{r}
+
+zoom(ord.tree, ords)
+
+```
+
+### and here are all the orders
+
+```{r, fig.width = 9, fig.height = 7}
+
+ggtree(ord.tree, layout = 'circular') + 
+  geom_tiplab2(size = 3)
+
+```
+
+#### These figures are based on the plant family phylogeny from: *Gastauer, Neto, and Alves.* Updated angiosperm family tree for analyzing phylogenetic diversity and community structure. *Acta Botanica Brasilica 31.2 (2017): 191-198.*
