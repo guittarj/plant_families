@@ -36,7 +36,7 @@ ate <- ate_raw %>%
 
 ```
 
-```{r, fig.height = 15, fig.width = 10, message = FALSE, echo = FALSE}
+```{r, fig.height = 10, fig.width = 10, message = FALSE, echo = FALSE}
 
 fams <- unique(ate$family[ate$family != ''])
 x <- as_data_frame(phylo)
@@ -112,6 +112,66 @@ ord.tree <- ToNewick(ord.tree, heightAttribute = NULL)
 ord.tree <- read.tree(text = ord.tree)
 
 ```
+
+```{r, fig.height = 10, fig.width = 10, message = FALSE, echo = FALSE}
+
+ords <- unique(ate$order[ate$order != ''])
+x <- as_data_frame(ord.tree)
+
+if(!all(ords %in% unique(ate_raw$all_orders))) 
+  stop(paste("Not all orders eaten are present in tree. Check your spelling of:", ords[!ords %in% unique(ate$all_orders)]))
+ate <- ate %>%
+  mutate(label2 = paste0(family, ' ', genus, ' ', species, ' (', common_name, ')'))
+
+x$parent_name <- x$label[match(x$parent, x$node)]
+x$parent_name[x$label == 'angiosperms'] <- NA
+
+a <- list()
+ups <- for(i in ords) {
+  #location
+  k <-1
+  #name
+  j <- x$parent_name[x$label == i]
+  a[[i]] <- c()
+  while (!is.na(j)) {
+    a[[i]][[k]] <- j
+    k <- k + 1
+    j <- x$parent_name[x$label == j]
+  }
+  a[[i]] <- a[[i]][!grepl("_to_", a[[i]], fixed = TRUE)]
+}
+
+j <- data.frame(parent = NA, child = 'angiosperms')
+
+for(i in names(a)) {
+  len <- length(a[[i]])
+  tmp <- data.frame(parent = a[[i]],
+                    child = c(i, a[[i]][1:len-1]))
+  j <- rbind(j, tmp)
+}
+
+j <- rbind(
+  mutate(j,
+    color = ifelse(child %in% ate_raw$all_orders, as.character(child), NA),
+    notes = ''),
+  transmute(ate, 
+    color = order, 
+    parent = order, 
+    child = label2,
+    notes = notes)) %>%
+  mutate(
+    color = as.numeric(as.factor(color)),
+    color = ifelse(is.na(color), '#FFFFFF',
+                   colorspace::rainbow_hcl(length(unique(color[!is.na(color)])))[color]))
+
+collapsibleTreeNetwork(j, 
+  attribute = 'notes', fill = 'color', 
+  collapsed = FALSE, zoomable = FALSE, nodeSize = 'leafCount'
+  )
+
+
+```
+
 
 ### Here is a static plot showing all the orders consumed so far.
 
